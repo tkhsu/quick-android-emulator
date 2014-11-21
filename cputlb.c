@@ -68,6 +68,9 @@ void tlb_flush(CPUArchState *env, int flush_global)
     env->tlb_flush_addr = -1;
     env->tlb_flush_mask = 0;
     tlb_flush_count++;
+#if defined(ITLB_ENABLE)
+    itlb_reset(env);
+#endif
 }
 
 static inline void tlb_flush_entry(CPUTLBEntry *tlb_entry, target_ulong addr)

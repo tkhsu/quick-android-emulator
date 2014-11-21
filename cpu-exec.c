@@ -186,6 +186,11 @@ static inline TranslationBlock *tb_find_fast(CPUArchState *env)
                  tb->flags != flags)) {
         tb = tb_find_slow(env, pc, cs_base, flags);
     }
+#if defined(CONFIG_SOFTMMU) && defined(ITLB_ENABLE)
+    itlb_set_phy_page(env, tb->pc, tb->page_addr[0]);
+    if (tb->page_addr[1] != -1)
+        itlb_set_phy_page(env, tb->pc + tb->size, tb->page_addr[1]);
+#endif
     return tb;
 }
 

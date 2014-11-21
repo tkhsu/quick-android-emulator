@@ -420,4 +420,39 @@ static inline int can_do_io(CPUArchState *env)
     return env->can_do_io != 0;
 }
 
+#if defined(CONFIG_SOFTMMU) && defined(ITLB_ENABLE)
+static inline int itlb_get_index(target_ulong vaddr)
+{
+    const hwaddr ITLB_MASK = ITLB_SIZE - 1;
+    return (vaddr >> TARGET_PAGE_BITS) & ITLB_MASK;
+}
+
+static inline void itlb_set_phy_page(CPUArchState *env,
+                                     target_ulong vaddr,
+                                     hwaddr paddr)
+{
+    env->itlb[itlb_get_index(vaddr)] = (ITLBEntry) {
+        .paddr = paddr & TARGET_PAGE_MASK,
+        .vaddr = vaddr & TARGET_PAGE_MASK
+    };
+}
+
+static inline void itlb_reset(CPUArchState *env)
+{
+    memset(env->itlb, 0xff, sizeof(env->itlb));
+}
+
+static inline hwaddr itlb_get_phy_addr(CPUArchState *env, target_ulong vaddr)
+{
+    return env->itlb[itlb_get_index(vaddr)].paddr;
+}
+
+static inline bool itlb_check_phy_addr(CPUArchState *env,
+                                       target_ulong vaddr,
+                                       hwaddr paddr)
+{
+    return itlb_get_phy_addr(env, vaddr) == paddr;
+}
+#endif /* CONFIG_SOFTMMU */
+
 #endif

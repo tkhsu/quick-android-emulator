@@ -39,6 +39,7 @@
 #include "exec/cputlb.h"
 #include "translate-all.h"
 #include "qemu/timer.h"
+#include "opt/optimizations.h"
 
 //#define DEBUG_TB_INVALIDATE
 //#define DEBUG_FLUSH
@@ -743,6 +744,9 @@ void tb_flush(CPUArchState *env1)
     CPU_FOREACH(cpu) {
         CPUArchState *env = cpu->env_ptr;
         memset (env->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof (void *));
+#if defined(CONFIG_SOFTMMU) && defined(ITLB_ENABLE)
+        itlb_reset(env);
+#endif
     }
 
     memset(tcg_ctx.tb_ctx.tb_phys_hash, 0,
@@ -1568,6 +1572,9 @@ void tb_flush_jmp_cache(CPUArchState *env, target_ulong addr)
     i = tb_jmp_cache_hash_page(addr);
     memset(&env->tb_jmp_cache[i], 0,
            TB_JMP_PAGE_SIZE * sizeof(TranslationBlock *));
+#ifdef ITLB_ENABLE
+    itlb_set_phy_page(cpu->env_ptr, addr, -1L);
+#endif
 }
 
 void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
