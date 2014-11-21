@@ -1466,11 +1466,16 @@ void HELPER(set_cp15)(CPUARMState *env, uint32_t insn, uint32_t val)
             op2 = 0;
         switch (op2) {
         case 0:
-                if (!arm_feature(env, ARM_FEATURE_XSCALE))
-                env->cp15.c1_sys = val;
+            /* Skip the TLB flush if nothing actually changed; Linux likes
+             * to do a lot of pointless SCTLR writes.
+             */
+            if (env->cp15.c1_sys == val)
+                break;
             /* ??? Lots of these bits are not implemented.  */
             /* This may enable/disable the MMU, so do a TLB flush.  */
             tlb_flush(env, 1);
+            if (!arm_feature(env, ARM_FEATURE_XSCALE))
+                env->cp15.c1_sys = val;
             break;
             case 1: /* Auxiliary control register.  */
             if (arm_feature(env, ARM_FEATURE_XSCALE)) {
@@ -1552,6 +1557,8 @@ void HELPER(set_cp15)(CPUARMState *env, uint32_t insn, uint32_t val)
         }
         break;
     case 3: /* MMU Domain access control / MPU write buffer control.  */
+        if (env->cp15.c3 == val)
+            break;
         env->cp15.c3 = val;
         tlb_flush(env, 1); /* Flush TLB as domain not tracked in TLB */
         break;
