@@ -426,6 +426,7 @@ enum {
 
 /* global register indices */
 static TCGv_ptr cpu_env;
+static TCGv_ptr cpu_tlb;
 static TCGv cpu_gpr[32], cpu_PC;
 static TCGv cpu_HI[MIPS_DSP_ACC], cpu_LO[MIPS_DSP_ACC], cpu_ACX[MIPS_DSP_ACC];
 static TCGv cpu_dspctrl, btarget, bcond;
@@ -8544,6 +8545,7 @@ static void mips_tcg_init(void)
         return;
 
     cpu_env = tcg_global_reg_new_ptr(TCG_AREG0, "env");
+    cpu_tlb = tcg_global_reg_new_ptr(TCG_AREG1, "tlb");
     TCGV_UNUSED(cpu_gpr[0]);
     for (i = 1; i < 32; i++)
         cpu_gpr[i] = tcg_global_mem_new(TCG_AREG0,

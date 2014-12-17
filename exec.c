@@ -559,9 +559,9 @@ void cpu_physical_memory_reset_dirty(ram_addr_t start, ram_addr_t end,
     CPUState *cpu;
     CPU_FOREACH(cpu) {
         int mmu_idx;
+        CPUArchState* env = cpu->env_ptr;
         for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
-            for(i = 0; i < CPU_TLB_SIZE; i++) {
-                CPUArchState* env = cpu->env_ptr;
+            for(i = 0; i < CPU_TLB_SIZE(env); i++) {
                 tlb_reset_dirty_range(&env->tlb_table[mmu_idx][i],
                                       start1, length);
             }
@@ -614,7 +614,7 @@ void cpu_tlb_update_dirty(CPUArchState *env)
     int i;
     int mmu_idx;
     for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
-        for(i = 0; i < CPU_TLB_SIZE; i++)
+        for(i = 0; i < CPU_TLB_SIZE(env); i++)
             tlb_update_dirty(&env->tlb_table[mmu_idx][i]);
     }
 }

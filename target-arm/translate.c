@@ -84,6 +84,7 @@ static uint32_t gen_opc_condexec_bits[OPC_BUF_SIZE];
 #define DISAS_SMC 6
 
 static TCGv_ptr cpu_env;
+static TCGv_ptr cpu_tlb;
 /* We reuse the same 64-bit temporaries for efficiency.  */
 static TCGv_i64 cpu_V0, cpu_V1, cpu_M0;
 static TCGv_i32 cpu_R[16];
@@ -111,6 +112,7 @@ void arm_translate_init(void)
     int i;
 
     cpu_env = tcg_global_reg_new_ptr(TCG_AREG0, "env");
+    cpu_tlb = tcg_global_reg_new_ptr(TCG_AREG1, "tlb");
 
     for (i = 0; i < 16; i++) {
         cpu_R[i] = tcg_global_mem_new_i32(TCG_AREG0,

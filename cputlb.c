@@ -127,6 +127,54 @@ static const CPUTLBEntry s_cputlb_empty_entry = {
     .addend     = -1,
 };
 
+/* tlb_info stuff */
+static inline void set_tlb_info(tlb_info_t *I, int bits)
+{
+    int cpu_tlb_size = 1 << bits;
+
+    I->bits = bits;
+    I->nb_tlb_entries = cpu_tlb_size;
+    I->tlb_table_size = cpu_tlb_size * sizeof(CPUTLBEntry);
+    I->tlb_table_mask = (cpu_tlb_size - 1) * sizeof(CPUTLBEntry);
+}
+
+void init_tlb_info(void *env1)
+{
+    CPUArchState *env = (CPUArchState*)env1;
+    set_tlb_info(&env->tlb_info, DEFAULT_TLB_BITS);
+    memset(env->tlb_table, -1, sizeof(env->tlb_table));
+}
+
+#define MAX_CONFLICT_MISS 10
+static inline int find_max(int *A, int n)
+{
+    int *I, *E;
+    int max = 0;
+    for (I = A, E = A + n; I != E; ++I)
+        if (*I > max)
+            max = *I;
+    return max;
+}
+
+static void update_tlb_info(CPUArchState *env)
+{
+    tlb_info_t *I = &env->tlb_info;
+    int bits = I->bits;
+
+    int miss = find_max(I->nb_conflict_misses, NB_MMU_MODES);
+    if (bits < MAX_TLB_BITS && miss > MAX_CONFLICT_MISS) {
+        set_tlb_info(I, bits + 1);
+        return ;
+    }
+
+    if (bits <= MIN_TLB_BITS) return;
+    int nb_tlb_entries_used = find_max(I->nb_tlb_entries_used, NB_MMU_MODES);
+    if (nb_tlb_entries_used < (I->nb_tlb_entries >> 2)) {
+        set_tlb_info(I, bits - 1);
+        return ;
+    }
+}
+
 /* NOTE:
  * If flush_global is true (the usual case), flush all tlb entries.
  * If flush_global is false, flush (at least) all tlb entries not
@@ -141,6 +189,7 @@ static const CPUTLBEntry s_cputlb_empty_entry = {
  */
 void tlb_flush(CPUArchState *env, int flush_global)
 {
+    tlb_info_t *I = &env->tlb_info;
     int i;
 
 #if defined(DEBUG_TLB)
@@ -149,7 +198,12 @@ void tlb_flush(CPUArchState *env, int flush_global)
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     env->current_tb = NULL;
-    memset(env->tlb_table, -1, sizeof(env->tlb_table));
+    update_tlb_info(env);
+    for (i = 0; i != NB_MMU_MODES; ++i) {
+        memset(&env->tlb_table[i][0], -1, I->tlb_table_size);
+        I->nb_conflict_misses[i] = 0;
+        I->nb_tlb_entries_used[i] = 0;
+    }
     memset(env->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof (void *));
     free_all_large_pages(&env->large_page_list);
 
@@ -197,7 +251,7 @@ void tlb_flush_page(CPUArchState *env, target_ulong addr)
     env->current_tb = NULL;
 
     addr &= TARGET_PAGE_MASK;
-    i = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    i = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE(env) - 1);
     for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
         tlb_flush_entry(&env->tlb_table[mmu_idx][i], addr);
     }
@@ -256,7 +310,7 @@ void tlb_set_dirty(CPUArchState *env, target_ulong vaddr)
     int mmu_idx;
 
     vaddr &= TARGET_PAGE_MASK;
-    i = (vaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    i = (vaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE(env) - 1);
     for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
         tlb_set_dirty1(&env->tlb_table[mmu_idx][i], vaddr);
     }
@@ -355,9 +409,16 @@ void tlb_set_page(CPUArchState *env, target_ulong vaddr,
         }
     }
 
-    index = (vaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    index = (vaddr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE(env) - 1);
     env->iotlb[mmu_idx][index] = iotlb - vaddr;
     te = &env->tlb_table[mmu_idx][index];
+    {
+        target_ulong test = te->addr_read;
+        test &= te->addr_write;
+        test &= te->addr_code;
+        if (test == -1)
+            env->tlb_info.nb_tlb_entries_used[mmu_idx]++;
+    }
     te->addend = addend - vaddr;
     if (prot & PAGE_READ) {
         te->addr_read = address;
@@ -405,7 +466,7 @@ tb_page_addr_t get_page_addr_code(CPUArchState *env1, target_ulong addr)
     int mmu_idx, page_index, pd;
     void *p;
 
-    page_index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    page_index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE(env1) - 1);
     mmu_idx = cpu_mmu_index(env1);
     if (unlikely(env1->tlb_table[mmu_idx][page_index].addr_code !=
                  (addr & TARGET_PAGE_MASK))) {

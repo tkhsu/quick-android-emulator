@@ -139,8 +139,10 @@ typedef enum {
 
 #if TCG_TARGET_REG_BITS == 64
 # define TCG_AREG0 TCG_REG_R14
+# define TCG_AREG1 TCG_REG_R15
 #else
 # define TCG_AREG0 TCG_REG_EBP
+# define TCG_AREG1 TCG_REG_EDI
 #endif
 
 static inline void flush_icache_range(uintptr_t start, uintptr_t stop)

@@ -23,6 +23,39 @@
 #define SIGNBIT (uint32_t)0x80000000
 #define SIGNBIT64 ((uint64_t)1 << 63)
 
+/* tlb_info stuff */
+static inline void set_tlb_info(tlb_info_t *I, int bits)
+{
+    int cpu_tlb_size = 1 << bits;
+
+    I->bits = bits;
+    I->nb_tlb_entries = cpu_tlb_size;
+    I->tlb_table_size = cpu_tlb_size * sizeof(CPUTLBEntry);
+    I->tlb_table_mask = (cpu_tlb_size - 1) * sizeof(CPUTLBEntry);
+}
+
+static void try_enlarge_tlb(CPUArchState *env, int mmu_idx)
+{
+    tlb_info_t *I = &env->tlb_info;
+    int bits = I->bits;
+    int i;
+
+#if 0
+    int miss = I->nb_conflict_misses[mmu_idx];
+    if (miss < MAX_CONFLICT_MISS) return;
+    if (bits == MAX_TLB_BITS) return;
+#else
+    if (bits >= MAX_TLB_BITS) return;
+    int nb_tlb_entries_used = I->nb_tlb_entries_used[mmu_idx];
+    if (nb_tlb_entries_used < (I->nb_tlb_entries >> 1)) return ;
+#endif
+    set_tlb_info(I, bits + 1);
+    for (i = 0; i != NB_MMU_MODES; ++i) {
+        memset(&env->tlb_table[i][0], -1, I->tlb_table_size);
+        I->nb_conflict_misses[i] = 0;
+    }
+}
+
 #if !defined(CONFIG_USER_ONLY)
 static void raise_exception(CPUARMState *env, int tt)
 {

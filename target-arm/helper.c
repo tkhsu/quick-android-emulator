@@ -357,6 +357,9 @@ void cpu_reset(CPUState *cpu)
                               &env->vfp.fp_status);
     set_float_detect_tininess(float_tininess_before_rounding,
                               &env->vfp.standard_fp_status);
+#if defined(CONFIG_SOFTMMU)
+    init_tlb_info(env);
+#endif
     tlb_flush(env, 1);
 #if IBTC_ENABLE
     ibtc_init();

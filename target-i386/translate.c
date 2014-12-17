@@ -75,6 +75,7 @@
 
 /* global register indexes */
 static TCGv_ptr cpu_env;
+static TCGv_ptr cpu_tlb;
 static TCGv cpu_A0, cpu_cc_src, cpu_cc_dst;
 static TCGv_i32 cpu_cc_op;
 /* local temps */
@@ -7790,6 +7791,7 @@ void optimize_flags_init(void)
     assert(sizeof(CCTable) == (1 << 4));
 #endif
     cpu_env = tcg_global_reg_new_ptr(TCG_AREG0, "env");
+    cpu_tlb = tcg_global_reg_new_ptr(TCG_AREG1, "tlb");
     cpu_cc_op = tcg_global_mem_new_i32(TCG_AREG0,
                                        offsetof(CPUX86State, cc_op), "cc_op");
     cpu_cc_src = tcg_global_mem_new(TCG_AREG0, offsetof(CPUX86State, cc_src),

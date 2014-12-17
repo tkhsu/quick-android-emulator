@@ -111,7 +111,15 @@
 # define helper_te_st_name  helper_le_st_name
 #endif
 
-
+#define UPDATE_TLB_INFO(tlb_addr, env, mmu_idx, index)                \
+do {                                                                  \
+    if (tlb_addr != -1) {                                             \
+        env->tlb_info.nb_conflict_misses[mmu_idx]++;                  \
+        try_enlarge_tlb(env, mmu_idx);                                \
+        index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE(env) - 1); \
+    }                                                                 \
+} while (0)
+ 
 static inline DATA_TYPE glue(io_read, SUFFIX)(CPUArchState *env,
                                               hwaddr physaddr,
                                               target_ulong addr,
@@ -147,7 +155,7 @@ static __attribute__((unused))
 WORD_TYPE helper_le_ld_name(CPUArchState *env, target_ulong addr, int mmu_idx,
                             uintptr_t retaddr)
 {
-    int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE(env) - 1);
     target_ulong tlb_addr = env->tlb_table[mmu_idx][index].ADDR_READ;
     uintptr_t haddr;
     DATA_TYPE res;
@@ -162,6 +170,10 @@ WORD_TYPE helper_le_ld_name(CPUArchState *env, target_ulong addr, int mmu_idx,
         if ((addr & (DATA_SIZE - 1)) != 0) {
             do_unaligned_access(env, addr, READ_ACCESS_TYPE, mmu_idx, retaddr);
         }
+#endif
+
+#ifndef SOFTMMU_CODE_ACCESS
+        UPDATE_TLB_INFO(tlb_addr, env, mmu_idx, index);
 #endif
         tlb_fill(env, addr, READ_ACCESS_TYPE, mmu_idx, retaddr);
         tlb_addr = env->tlb_table[mmu_idx][index].ADDR_READ;
@@ -229,7 +241,7 @@ static __attribute__((unused))
 WORD_TYPE helper_be_ld_name(CPUArchState *env, target_ulong addr, int mmu_idx,
                             uintptr_t retaddr)
 {
-    int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE(env) - 1);
     target_ulong tlb_addr = env->tlb_table[mmu_idx][index].ADDR_READ;
     uintptr_t haddr;
     DATA_TYPE res;
@@ -244,6 +256,10 @@ WORD_TYPE helper_be_ld_name(CPUArchState *env, target_ulong addr, int mmu_idx,
         if ((addr & (DATA_SIZE - 1)) != 0) {
             do_unaligned_access(env, addr, READ_ACCESS_TYPE, mmu_idx, retaddr);
         }
+#endif
+
+#ifndef SOFTMMU_CODE_ACCESS
+        UPDATE_TLB_INFO(tlb_addr, env, mmu_idx, index);
 #endif
         tlb_fill(env, addr, READ_ACCESS_TYPE, mmu_idx, retaddr);
         tlb_addr = env->tlb_table[mmu_idx][index].ADDR_READ;
@@ -359,7 +375,7 @@ static inline void glue(io_write, SUFFIX)(CPUArchState *env,
 void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
                        int mmu_idx, uintptr_t retaddr)
 {
-    int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE(env) - 1);
     target_ulong tlb_addr = env->tlb_table[mmu_idx][index].addr_write;
     uintptr_t haddr;
 
@@ -373,6 +389,10 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
         if ((addr & (DATA_SIZE - 1)) != 0) {
             do_unaligned_access(env, addr, 1, mmu_idx, retaddr);
         }
+#endif
+
+#ifndef SOFTMMU_CODE_ACCESS
+        UPDATE_TLB_INFO(tlb_addr, env, mmu_idx, index);
 #endif
         tlb_fill(env, addr, 1, mmu_idx, retaddr);
         tlb_addr = env->tlb_table[mmu_idx][index].addr_write;
@@ -435,7 +455,7 @@ void helper_le_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
 void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
                        int mmu_idx, uintptr_t retaddr)
 {
-    int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    int index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE(env) - 1);
     target_ulong tlb_addr = env->tlb_table[mmu_idx][index].addr_write;
     uintptr_t haddr;
 
@@ -449,6 +469,10 @@ void helper_be_st_name(CPUArchState *env, target_ulong addr, DATA_TYPE val,
         if ((addr & (DATA_SIZE - 1)) != 0) {
             do_unaligned_access(env, addr, 1, mmu_idx, retaddr);
         }
+#endif
+
+#ifndef SOFTMMU_CODE_ACCESS
+        UPDATE_TLB_INFO(tlb_addr, env, mmu_idx, index);
 #endif
         tlb_fill(env, addr, 1, mmu_idx, retaddr);
         tlb_addr = env->tlb_table[mmu_idx][index].addr_write;

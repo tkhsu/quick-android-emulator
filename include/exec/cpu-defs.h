@@ -75,7 +75,7 @@ typedef uint64_t target_ulong;
 
 #if !defined(CONFIG_USER_ONLY)
 #define CPU_TLB_BITS 8
-#define CPU_TLB_SIZE (1 << CPU_TLB_BITS)
+#define CPU_TLB_SIZE(e) ((e)->tlb_info.nb_tlb_entries)
 
 #if HOST_LONG_BITS == 32 && TARGET_LONG_BITS == 32
 #define CPU_TLB_ENTRY_BITS 4
@@ -104,6 +104,19 @@ typedef struct CPUTLBEntry {
 } CPUTLBEntry;
 
 QEMU_BUILD_BUG_ON(sizeof(CPUTLBEntry) != (1 << CPU_TLB_ENTRY_BITS));
+#define DEFAULT_TLB_BITS 11
+#define MIN_TLB_BITS 8
+#define MAX_TLB_BITS 13
+typedef struct tlb_info_t {
+    int bits;
+    int nb_tlb_entries;
+    /* for tlb_flush */
+    int tlb_table_size;
+    int tlb_table_mask;
+    int nb_conflict_misses[NB_MMU_MODES];
+    int nb_tlb_entries_used[NB_MMU_MODES];
+} tlb_info_t;
+void init_tlb_info(void *env);
 #include "exec/cputlb-large-page.h"
 #include "opt/optimizations.h"
 #if defined(CONFIG_SOFTMMU) && defined(ITLB_ENABLE)
@@ -119,9 +132,10 @@ typedef struct ITLBEntry {
 #endif
 
 #define CPU_COMMON_TLB \
+    tlb_info_t tlb_info;                                              \
     /* The meaning of the MMU modes is defined in the target code. */ \
-    CPUTLBEntry tlb_table[NB_MMU_MODES][CPU_TLB_SIZE];                \
-    hwaddr iotlb[NB_MMU_MODES][CPU_TLB_SIZE];                         \
+    CPUTLBEntry tlb_table[NB_MMU_MODES][(1 << MAX_TLB_BITS)];         \
+    hwaddr iotlb[NB_MMU_MODES][(1 << MAX_TLB_BITS)];                  \
     target_ulong tlb_flush_addr;                                      \
     target_ulong tlb_flush_mask;                                      \
     ITLB                                                              \
