@@ -22,6 +22,7 @@ typedef struct tlb_entry_t {
 typedef struct large_page_t {
     target_ulong vaddr;
     target_ulong mask;
+    int prot;
     struct large_page_t *next;
     /* entries within this large page */
     tlb_entry_t *entry_list;

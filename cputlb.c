@@ -43,7 +43,8 @@ static inline large_page_t *find_and_remove_large_page(large_page_list_t *l,
 static inline large_page_t *new_large_page(large_page_list_t *l,
                                            target_ulong vaddr,
                                            target_ulong size,
-                                           int mmu_idx)
+                                           int mmu_idx,
+                                           int prot)
 {
     /* we assume the large page (vaddr,size) is not in l->allocated. */
     large_page_t *lp;
@@ -54,14 +55,16 @@ static inline large_page_t *new_large_page(large_page_list_t *l,
     vaddr = vaddr & mask;
     lp->vaddr = vaddr;
     lp->mask = mask;
+    lp->prot = prot;
     lp->entry_list = NULL;
     lp->next = l->allocated[mmu_idx];
     l->allocated[mmu_idx] = lp;
     return lp;
 }
 
-static inline void free_large_page(large_page_t *lp)
+static inline void free_large_page(CPUArchState *env, large_page_t *lp)
 {
+    const int exec_page = lp->prot | PAGE_EXEC;
     if (lp->entry_list) {
         /* flush all tlb entries of this large page */
         tlb_entry_t *te = lp->entry_list;
@@ -69,6 +72,13 @@ static inline void free_large_page(large_page_t *lp)
             CPUTLBEntry *e = te->entry;
             e->addr_read = -1;
             e->addr_write = -1;
+            if (exec_page) {
+                target_ulong addr_code = e->addr_code;
+                int i = tb_jmp_cache_hash_page(addr_code);
+                memset(&env->tb_jmp_cache[i], 0,
+                       TB_JMP_PAGE_SIZE * sizeof(TranslationBlock *));
+                itlb_set_phy_page(env, addr_code, -1L);
+            }
             e->addr_code = -1;
             te = te->next;
         }
@@ -172,7 +182,7 @@ void tlb_flush_page(CPUArchState *env, target_ulong addr)
     for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
         lp = find_and_remove_large_page(&env->large_page_list, addr, mmu_idx);
         if (lp) {
-            free_large_page(lp);
+            free_large_page(env, lp);
             flag = true;
         }
     }
@@ -377,7 +387,7 @@ void tlb_set_page(CPUArchState *env, target_ulong vaddr,
         /* 1. find out whether this large page has been allocated */
         p = find_large_page(&env->large_page_list, vaddr, mmu_idx);
         if (!p) {
-            p = new_large_page(&env->large_page_list, vaddr, size, mmu_idx);
+            p = new_large_page(&env->large_page_list, vaddr, size, mmu_idx, prot);
         }
         /* add CPUTLBEntry into this large page */
         add_tlb_entry(&env->large_page_list, p, te);
