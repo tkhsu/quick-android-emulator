@@ -3498,6 +3498,22 @@ static int disas_vfp_insn(CPUARMState * env, DisasContext *s, uint32_t insn)
     return 0;
 }
 
+uint64_t cpbl_counter_total = 0, cpbl_counter_miss = 0;
+uint64_t cpbl_counter_total1 = 0, cpbl_counter_miss1 = 0;
+static inline void gen_inc_counter_i64(void *C)
+{
+    uint64_t addr = (uintptr_t)C;
+    TCGv_ptr addr_ptr = tcg_const_ptr(addr);
+    TCGv_i64 counter = tcg_temp_new_i64();
+
+    tcg_gen_ld_i64(counter, addr_ptr, 0);
+    tcg_gen_addi_i64(counter, counter, 1);
+    tcg_gen_st_i64(counter, addr_ptr, 0);
+
+    tcg_temp_free_ptr(addr_ptr);
+    tcg_temp_free_i64(counter);
+}
+
 static inline void gen_goto_tb(DisasContext *s, int n, uint32_t dest)
 {
     TranslationBlock *tb;
@@ -3508,8 +3524,36 @@ static inline void gen_goto_tb(DisasContext *s, int n, uint32_t dest)
         gen_set_pc_im(dest);
         tcg_gen_exit_tb((tcg_target_long)tb + n);
     } else {
+        int index = itlb_get_index(dest);
+        TCGv_i32 dest1 = tcg_const_i32(dest);
+        TCGv_i32 pc1 = tcg_temp_new_i32();
+        TCGv_i32 pc2 = tcg_temp_new_i32();
+        int label_miss;
+
+        // gen_inc_counter_i64(&cpbl_counter_total);
+        /* pc1 = env->itlb[index].vaddr; */
+        tcg_gen_ld_i32(pc1, cpu_env, offsetof(CPUArchState, itlb[index].vaddr));
+        /* pc2 = pc & TARGET_PAGE_MASK; */
+        tcg_gen_andi_i32(pc2, dest1, TARGET_PAGE_MASK);
+        /* goto miss if pc1, pc2 not equal */
+        label_miss = gen_new_label();
+        tcg_gen_brcond_i32(TCG_COND_NE, pc1, pc2, label_miss);
+        /* pc1 == pc2 */
+        tcg_gen_goto_tb(n);
+        gen_set_pc_im(dest);
+        tcg_gen_exit_tb((uintptr_t)tb + n);
+
+        /* set miss label */
+        gen_set_label(label_miss);
+        // gen_inc_counter_i64(&cpbl_counter_miss);
+
+        /* pc1 != pc2 */
         gen_set_pc_im(dest);
         tcg_gen_exit_tb(0);
+
+        tcg_temp_free_i32(pc1);
+        tcg_temp_free_i32(pc2);
+        tcg_temp_free_i32(dest1);
     }
 }
 
