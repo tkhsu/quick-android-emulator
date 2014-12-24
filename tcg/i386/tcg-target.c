@@ -551,7 +551,10 @@ static void tcg_out_movi(TCGContext *s, TCGType type,
     tcg_target_long diff;
 
     if (arg == 0) {
-        tgen_arithr(s, ARITH_XOR, ret, ret);
+        int p_rexw = 0;
+        if (type == TCG_TYPE_I64)
+            p_rexw = P_REXW;
+        tgen_arithr(s, ARITH_XOR | p_rexw, ret, ret);
         return;
     }
     if (arg == (uint32_t)arg || type == TCG_TYPE_I32) {
