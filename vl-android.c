@@ -2112,6 +2112,7 @@ void android_nand_add_image(const char* part_name,
 }
 
 
+extern void dump_exec_info(FILE *f, fprintf_function cpu_fprintf);
 int main(int argc, char **argv, char **envp)
 {
     const char *gdbstub_dev = NULL;
@@ -4013,6 +4014,7 @@ int main(int argc, char **argv, char **envp)
     quit_timers();
     net_cleanup();
     android_emulation_teardown();
+    dump_exec_info(stderr, fprintf);
     return 0;
 }
 

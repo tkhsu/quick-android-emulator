@@ -42,6 +42,7 @@ DEF(set_label, 0, 0, 1, TCG_OPF_BB_END | TCG_OPF_NOT_PRESENT)
 /* variable number of parameters */
 DEF(call, 0, 1, 2, TCG_OPF_CALL_CLOBBER)
 
+DEF(jmp, 0, 1, 0, TCG_OPF_BB_END)
 DEF(br, 0, 0, 1, TCG_OPF_BB_END)
 
 #define IMPL(X) (__builtin_constant_p(X) && !(X) ? TCG_OPF_NOT_PRESENT : 0)

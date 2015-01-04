@@ -215,4 +215,7 @@ DEF_HELPER_3(rclq, tl, env, tl, tl)
 DEF_HELPER_3(rcrq, tl, env, tl, tl)
 #endif
 
+#if IBTC_ENABLE
+DEF_HELPER_1(ibtc_lookup, ptr, tl)
+#endif
 #include "exec/def-helper.h"

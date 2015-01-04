@@ -23,6 +23,7 @@
 #include "sysemu/kvm.h"
 #include "exec/hax.h"
 #include "qemu/atomic.h"
+#include "opt/optimizations.h"
 
 #if !defined(CONFIG_SOFTMMU)
 #undef EAX
@@ -587,6 +588,20 @@ int cpu_exec(CPUOldState *env)
                 if (next_tb != 0 && tb->page_addr[1] == -1) {
                     tb_add_jump((TranslationBlock *)(next_tb & ~3), next_tb & 3, tb);
                 }
+#if IBTC_ENABLE
+                IBTCEntry *missed_entry = env->ibtc_missed_entry;
+                if (unlikely(missed_entry)) {
+                    ibtc_update(missed_entry,
+                                tb->pc,
+                                tb->tc_ptr
+#ifdef CONFIG_SOFTMMU
+                                , ibtc_get_flags(env)
+                                , itlb_get_phy_addr(env, tb->pc)
+#endif
+                                );
+                    env->ibtc_missed_entry = 0;
+                }
+#endif
                 spin_unlock(&tcg_ctx.tb_ctx.tb_lock);
 
                 /* cpu_interrupt might be called while translating the

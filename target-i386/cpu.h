@@ -50,6 +50,7 @@
 #include "exec/cpu-defs.h"
 
 #include "fpu/softfloat.h"
+#include "opt/ibtc.h"
 
 #define R_EAX 0
 #define R_ECX 1
@@ -856,6 +857,7 @@ typedef struct CPUX86State {
     uint64 mcg_status;
     uint64 mcg_ctl;
     uint64 *mce_banks;
+    IBTC_ELEMENT
 } CPUX86State;
 
 #include "cpu-qom.h"
@@ -1128,6 +1130,19 @@ static inline void cpu_get_tb_cpu_state(CPUX86State *env, target_ulong *pc,
     *flags = env->hflags |
         (env->eflags & (IOPL_MASK | TF_MASK | RF_MASK | VM_MASK));
 }
+
+#if IBTC_ENABLE
+static inline uintptr_t ibtc_get_flags(CPUX86State *env)
+{
+    const uint32_t mask = (IOPL_MASK | TF_MASK | RF_MASK | VM_MASK | AC_MASK);
+    return env->hflags | (env->eflags & mask);
+}
+
+static inline int ibtc_check_flags(CPUX86State *env, uintptr_t flags)
+{
+    return ibtc_get_flags(env) == flags;
+}
+#endif
 
 void apic_init_reset(CPUX86State *env);
 void apic_sipi(CPUX86State *env);

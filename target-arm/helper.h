@@ -470,4 +470,9 @@ DEF_HELPER_3(neon_qzip16, void, env, i32, i32)
 DEF_HELPER_3(neon_qzip32, void, env, i32, i32)
 DEF_HELPER_2(neon_vldst_all, void, env, i32)
 
+#if IBTC_ENABLE
+/* defined in optimizations */
+DEF_HELPER_1(ibtc_lookup, ptr, i32)
+#endif
+
 #include "exec/def-helper.h"

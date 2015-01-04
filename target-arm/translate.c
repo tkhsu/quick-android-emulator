@@ -29,6 +29,7 @@
 #include "disas/disas.h"
 #include "tcg-op.h"
 #include "qemu/log.h"
+#include "opt/optimizations.h"
 
 #include "helper.h"
 #define GEN_HELPER 1
@@ -172,6 +173,24 @@ static inline TCGv load_reg(DisasContext *s, int reg)
     return tmp;
 }
 
+#if IBTC_ENABLE
+static int gen_ibtc = 0;
+static void gen_ibtc_jmp(void)
+{
+    TCGv_ptr host_addr;
+
+    gen_ibtc = 0;
+    if (!ibtc.enabled) {
+        tcg_gen_exit_tb(0);
+    } else {
+        host_addr = tcg_temp_new_ptr();
+        gen_helper_ibtc_lookup(host_addr, cpu_R[15]);
+        tcg_gen_op1i(INDEX_op_jmp, GET_TCGV_ptr(host_addr));
+        tcg_temp_free_ptr(host_addr);
+    }
+}
+#endif /* IBTC_ENABLE */
+
 /* Set a CPU register.  The source must be a temporary and will be
    marked as dead.  */
 static void store_reg(DisasContext *s, int reg, TCGv var)
@@ -179,6 +198,9 @@ static void store_reg(DisasContext *s, int reg, TCGv var)
     if (reg == 15) {
         tcg_gen_andi_i32(var, var, ~1);
         s->is_jmp = DISAS_JUMP;
+#if IBTC_ENABLE
+        gen_ibtc = 1;
+#endif
     }
     tcg_gen_mov_i32(cpu_R[reg], var);
     tcg_temp_free_i32(var);
@@ -728,6 +750,9 @@ static inline void gen_bx_im(DisasContext *s, uint32_t addr)
         tcg_temp_free_i32(tmp);
     }
     tcg_gen_movi_i32(cpu_R[15], addr & ~1);
+#if IBTC_ENABLE
+    gen_ibtc = 1;
+#endif
 }
 
 /* Set PC and Thumb state from var.  var is marked as dead.  */
@@ -737,6 +762,9 @@ static inline void gen_bx(DisasContext *s, TCGv var)
     tcg_gen_andi_i32(cpu_R[15], var, ~1);
     tcg_gen_andi_i32(var, var, 1);
     store_cpu_field(var, thumb);
+#if IBTC_ENABLE
+    gen_ibtc = 1;
+#endif
 }
 
 /* Variant of store_reg which uses branch&exchange logic when storing
@@ -9963,6 +9991,11 @@ static inline void gen_intermediate_code_internal(CPUARMState *env,
         case DISAS_JUMP:
         case DISAS_UPDATE:
             /* indicate that the hash table must be used to find the next TB */
+#if IBTC_ENABLE
+            if (gen_ibtc)
+                gen_ibtc_jmp();
+            else
+#endif
             tcg_gen_exit_tb(0);
             break;
         case DISAS_TB_JUMP:

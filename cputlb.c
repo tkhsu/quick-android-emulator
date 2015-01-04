@@ -21,6 +21,7 @@
 #include "cpu.h"
 #include "exec/exec-all.h"
 #include "exec/cputlb.h"
+#include "opt/optimizations.h"
 
 /* statistics */
 int tlb_flush_count;

@@ -117,6 +117,7 @@ static bool have_cmov;
 # define have_cmov 0
 #endif
 
+#include "opt/ibtc.h"
 static uint8_t *tb_ret_addr;
 
 static void patch_reloc(uint8_t *code_ptr, int type,
@@ -1644,6 +1645,14 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
             tcg_out_modrm(s, OPC_GRP5, EXT5_CALLN_Ev, args[0]);
         }
         break;
+    case INDEX_op_jmp:
+        if (const_args[0]) {
+            tcg_out_jmp(s, args[0]);
+        } else {
+            /* jmp *reg */
+            tcg_out_modrm(s, OPC_GRP5, EXT5_JMPN_Ev, args[0]);
+        }
+        break;
     case INDEX_op_br:
         tcg_out_jxx(s, JCC_JMP, args[0], 0);
         break;
@@ -1950,6 +1959,7 @@ static const TCGTargetOpDef x86_op_defs[] = {
     { INDEX_op_exit_tb, { } },
     { INDEX_op_goto_tb, { } },
     { INDEX_op_call, { "ri" } },
+    { INDEX_op_jmp, { "ri" } },
     { INDEX_op_br, { } },
     { INDEX_op_mov_i32, { "r", "r" } },
     { INDEX_op_movi_i32, { "r" } },
@@ -2144,6 +2154,10 @@ static void tcg_target_qemu_prologue(TCGContext *s)
     tcg_out_addi(s, TCG_REG_ESP, -stack_addend);
     /* jmp *tb.  */
     tcg_out_modrm(s, OPC_GRP5, EXT5_JMPN_Ev, tcg_target_call_iarg_regs[1]);
+#endif
+#if IBTC_ENABLE
+    ibtc.tb_ret_addr = s->code_ptr;
+    tcg_out_movi(s, TCG_TYPE_PTR, TCG_REG_EAX, 0);
 #endif
 
     /* TB epilogue */

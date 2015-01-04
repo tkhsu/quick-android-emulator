@@ -532,6 +532,10 @@ void cpu_reset(CPUState *cpu)
     env->dr[7] = DR7_FIXED_1;
     cpu_breakpoint_remove_all(env, BP_CPU);
     cpu_watchpoint_remove_all(env, BP_CPU);
+#if IBTC_ENABLE
+    ibtc_init();
+    ibtc_clean(env->ibtc);
+#endif
 }
 
 void cpu_x86_close(CPUX86State *env)

@@ -17,6 +17,7 @@
 #include "mips-defs.h"
 #include "exec/cpu-defs.h"
 #include "fpu/softfloat.h"
+#include "opt/ibtc.h"
 
 // uint_fast8_t and uint_fast16_t not in <sys/int_types.h>
 // XXX: move that elsewhere
@@ -474,6 +475,7 @@ struct CPUMIPSState {
     const mips_def_t *cpu_model;
     void *irq[8];
     struct QEMUTimer *timer; /* Internal timer */
+    IBTC_ELEMENT
 };
 
 #include "cpu-qom.h"
@@ -694,5 +696,17 @@ static inline void cpu_pc_from_tb(CPUMIPSState *env, TranslationBlock *tb)
     env->hflags &= ~MIPS_HFLAG_BMASK;
     env->hflags |= tb->flags & MIPS_HFLAG_BMASK;
 }
+
+#if IBTC_ENABLE
+static inline int ibtc_get_flags(CPUMIPSState *env)
+{
+    return env->hflags & (MIPS_HFLAG_TMASK | MIPS_HFLAG_BMASK);
+}
+
+static inline int ibtc_check_flags(CPUMIPSState *env, uintptr_t flags)
+{
+    return ibtc_get_flags(env) == flags;
+}
+#endif /* IBTC_ENABLE */
 
 #endif /* !defined (__MIPS_CPU_H__) */

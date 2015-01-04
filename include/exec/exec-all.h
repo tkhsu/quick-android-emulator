@@ -420,6 +420,7 @@ static inline int can_do_io(CPUArchState *env)
     return env->can_do_io != 0;
 }
 
+#include "opt/optimizations.h"
 #if defined(CONFIG_SOFTMMU) && defined(ITLB_ENABLE)
 static inline int itlb_get_index(target_ulong vaddr)
 {

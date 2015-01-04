@@ -358,6 +358,10 @@ void cpu_reset(CPUState *cpu)
     set_float_detect_tininess(float_tininess_before_rounding,
                               &env->vfp.standard_fp_status);
     tlb_flush(env, 1);
+#if IBTC_ENABLE
+    ibtc_init();
+    ibtc_clean(env->ibtc);
+#endif
 }
 
 static int vfp_gdb_get_reg(CPUARMState *env, uint8_t *buf, int reg)

@@ -27,6 +27,7 @@
 #include "cpu.h"
 #include "disas/disas.h"
 #include "tcg-op.h"
+#include "opt/optimizations.h"
 
 #include "helper.h"
 #define GEN_HELPER 1
@@ -2863,6 +2864,23 @@ static void gen_debug(DisasContext *s, target_ulong cur_eip)
     s->is_jmp = 3;
 }
 
+#if IBTC_ENABLE
+TCGv ibtc_dest_eip = (TCGv)-1;
+const TCGv ibtc_invalid_eip = (TCGv)-1;
+static void gen_ibtc_jmp(void)
+{
+    if (!ibtc.enabled) {
+        tcg_gen_exit_tb(0);
+    } else {
+        tcg_gen_ld_tl(cpu_tmp0, cpu_env, offsetof(CPUX86State, segs[R_CS].base));
+        tcg_gen_add_tl(cpu_tmp0, cpu_tmp0, ibtc_dest_eip);
+        gen_helper_ibtc_lookup(cpu_ptr0, cpu_tmp0);
+        tcg_gen_op1i(INDEX_op_jmp, GET_TCGV_ptr(cpu_ptr0));
+        ibtc_dest_eip = ibtc_invalid_eip;
+    }
+}
+#endif
+
 /* generate a generic end of block. Trace exception is also generated
    if needed */
 static void gen_eob(DisasContext *s)
@@ -2879,6 +2897,11 @@ static void gen_eob(DisasContext *s)
     } else if (s->tf) {
 	gen_helper_single_step(cpu_env);
     } else {
+#if IBTC_ENABLE
+        if (ibtc_dest_eip != ibtc_invalid_eip)
+            gen_ibtc_jmp();
+        else
+#endif
         tcg_gen_exit_tb(0);
     }
     s->is_jmp = 3;
@@ -4826,6 +4849,9 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s, target_ulong p
             gen_movtl_T1_im(next_eip);
             gen_push_T1(s);
             gen_op_jmp_T0();
+#if IBTC_ENABLE
+            ibtc_dest_eip = cpu_T[0];
+#endif
             gen_eob(s);
             break;
         case 3: /* lcall Ev */
@@ -4846,12 +4872,19 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s, target_ulong p
                                       tcg_const_i32(dflag),
                                       tcg_const_i32(s->pc - s->cs_base));
             }
+#if IBTC_ENABLE
+            tcg_gen_ld_tl(cpu_tmp4, cpu_env, offsetof(CPUX86State, eip));
+            ibtc_dest_eip = cpu_tmp4;
+#endif
             gen_eob(s);
             break;
         case 4: /* jmp Ev */
             if (s->dflag == 0)
                 gen_op_andl_T0_ffff();
             gen_op_jmp_T0();
+#if IBTC_ENABLE
+            ibtc_dest_eip = cpu_T[0];
+#endif
             gen_eob(s);
             break;
         case 5: /* ljmp Ev */
@@ -4870,6 +4903,10 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s, target_ulong p
                 gen_op_movl_T0_T1();
                 gen_op_jmp_T0();
             }
+#if IBTC_ENABLE
+            tcg_gen_ld_tl(cpu_tmp4, cpu_env, offsetof(CPUX86State, eip));
+            ibtc_dest_eip = cpu_tmp4;
+#endif
             gen_eob(s);
             break;
         case 6: /* push Ev */

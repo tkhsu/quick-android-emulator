@@ -41,6 +41,7 @@
 #include "exec/cpu-defs.h"
 
 #include "fpu/softfloat.h"
+#include "opt/ibtc.h" /* IBTC_ELEMENT */
 
 #define TARGET_HAS_ICE 1
 
@@ -268,6 +269,7 @@ typedef struct CPUARMState {
     } cp[15];
     void *nvic;
     const struct arm_boot_info *boot_info;
+    IBTC_ELEMENT
 } CPUARMState;
 
 #include "cpu-qom.h"
@@ -907,6 +909,18 @@ static inline bool cpu_has_work(CPUState *cpu)
     return (cpu->interrupt_request &
             (CPU_INTERRUPT_FIQ | CPU_INTERRUPT_HARD | CPU_INTERRUPT_EXITTB));
 }
+
+#if IBTC_ENABLE
+static inline int ibtc_get_flags(CPUARMState *env)
+{
+    return env->vfp.xregs[ARM_VFP_FPEXC] & (1 << 30);
+}
+
+static inline bool ibtc_check_flags(CPUARMState *env, uintptr_t flags)
+{
+    return ibtc_get_flags(env) == flags;
+}
+#endif
 
 #include "exec/exec-all.h"
 

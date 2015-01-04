@@ -744,6 +744,9 @@ void tb_flush(CPUArchState *env1)
     CPU_FOREACH(cpu) {
         CPUArchState *env = cpu->env_ptr;
         memset (env->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof (void *));
+#if IBTC_ENABLE
+        ibtc_clean(env->ibtc);
+#endif
 #if defined(CONFIG_SOFTMMU) && defined(ITLB_ENABLE)
         itlb_reset(env);
 #endif
@@ -902,6 +905,11 @@ void tb_phys_invalidate(TranslationBlock *tb, tb_page_addr_t page_addr)
         if (env->tb_jmp_cache[h] == tb) {
             env->tb_jmp_cache[h] = NULL;
         }
+#if IBTC_ENABLE
+        IBTCEntry *entry = ibtc_get_entry(env->ibtc, tb->pc);
+        if (entry->g == tb->pc)
+            entry->g = -1;
+#endif
     }
 
     /* suppress this TB from the two jump lists */
@@ -1575,6 +1583,13 @@ void tb_flush_jmp_cache(CPUArchState *env, target_ulong addr)
 #ifdef ITLB_ENABLE
     itlb_set_phy_page(env, addr, -1L);
 #endif
+#if IBTC_ENABLE
+    IBTCEntry *I = ibtc_get_entry(env->ibtc, addr & TARGET_PAGE_MASK),
+              *E = I + TARGET_PAGE_SIZE;
+    for (; I != E; ++I)
+        if (((I->g ^ addr) & TARGET_PAGE_MASK) == 0)
+            I->g = -1;
+#endif
 }
 
 void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
@@ -1637,6 +1652,9 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
     cpu_fprintf(f, "TB invalidate count %d\n",
             tcg_ctx.tb_ctx.tb_phys_invalidate_count);
     cpu_fprintf(f, "TLB flush count     %d\n", tlb_flush_count);
+#if IBTC_PROFILE
+    ibtc_profile_print();
+#endif
     tcg_dump_info(f, cpu_fprintf);
 }
 
