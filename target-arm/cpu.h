@@ -38,6 +38,9 @@
 #define CPUArchState struct CPUARMState
 
 #include "qemu-common.h"
+
+#define NB_MMU_MODES 2
+
 #include "exec/cpu-defs.h"
 
 #include "fpu/softfloat.h"
@@ -83,8 +86,6 @@ typedef uint32_t ARMReadCPFunc(void *opaque, int cp_info,
                                void *retaddr);
 
 struct arm_boot_info;
-
-#define NB_MMU_MODES 2
 
 /* We currently assume float and double are IEEE single and double
    precision respectively.

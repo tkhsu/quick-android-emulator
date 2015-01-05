@@ -47,6 +47,8 @@
 
 #define CPUArchState struct CPUX86State
 
+#define NB_MMU_MODES 2
+
 #include "exec/cpu-defs.h"
 
 #include "fpu/softfloat.h"
@@ -731,8 +733,6 @@ typedef struct {
 #else
 #define CPU_NB_REGS CPU_NB_REGS32
 #endif
-
-#define NB_MMU_MODES 2
 
 typedef struct CPUX86State {
     /* standard registers */

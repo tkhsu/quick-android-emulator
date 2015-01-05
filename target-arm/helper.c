@@ -362,6 +362,9 @@ void cpu_reset(CPUState *cpu)
     ibtc_init();
     ibtc_clean(env->ibtc);
 #endif
+#if defined(CONFIG_SOFTMMU)
+    large_page_list_init(&env->large_page_list);
+#endif
 }
 
 static int vfp_gdb_get_reg(CPUARMState *env, uint8_t *buf, int reg)
@@ -1375,8 +1378,8 @@ int cpu_arm_handle_mmu_fault (CPUARMState *env, target_ulong address,
                         &page_size);
     if (ret == 0) {
         /* Map a single [sub]page.  */
-        phys_addr &= ~(uint32_t)0x3ff;
-        address &= ~(uint32_t)0x3ff;
+        phys_addr &= TARGET_PAGE_MASK;
+        address &= TARGET_PAGE_MASK;
         tlb_set_page (env, address, phys_addr, prot | PAGE_EXEC, mmu_idx,
                       page_size);
         return 0;

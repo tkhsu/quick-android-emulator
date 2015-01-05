@@ -15,6 +15,9 @@
 #include "config.h"
 #include "qemu-common.h"
 #include "mips-defs.h"
+
+#define NB_MMU_MODES 3
+
 #include "exec/cpu-defs.h"
 #include "fpu/softfloat.h"
 #include "opt/ibtc.h"
@@ -111,8 +114,6 @@ struct CPUMIPSFPUContext {
 #define FP_INVALID        16
 #define FP_UNIMPLEMENTED  32
 };
-
-#define NB_MMU_MODES 3
 
 typedef struct CPUMIPSMVPContext CPUMIPSMVPContext;
 struct CPUMIPSMVPContext {

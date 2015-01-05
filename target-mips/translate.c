@@ -8716,6 +8716,9 @@ void cpu_reset(CPUState *cpu)
     }
 #endif
     env->exception_index = EXCP_NONE;
+#if defined(CONFIG_SOFTMMU)
+    large_page_list_init(&env->large_page_list);
+#endif
 }
 
 void restore_state_to_opc(CPUMIPSState *env, TranslationBlock *tb, int pc_pos)

@@ -104,6 +104,7 @@ typedef struct CPUTLBEntry {
 } CPUTLBEntry;
 
 QEMU_BUILD_BUG_ON(sizeof(CPUTLBEntry) != (1 << CPU_TLB_ENTRY_BITS));
+#include "exec/cputlb-large-page.h"
 #include "opt/optimizations.h"
 #if defined(CONFIG_SOFTMMU) && defined(ITLB_ENABLE)
 typedef struct ITLBEntry {
@@ -123,7 +124,8 @@ typedef struct ITLBEntry {
     hwaddr iotlb[NB_MMU_MODES][CPU_TLB_SIZE];                         \
     target_ulong tlb_flush_addr;                                      \
     target_ulong tlb_flush_mask;                                      \
-    ITLB
+    ITLB                                                              \
+    large_page_list_t large_page_list;
 
 #else
 

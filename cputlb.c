@@ -23,6 +23,87 @@
 #include "exec/cputlb.h"
 #include "opt/optimizations.h"
 
+#include <stdio.h>
+static inline large_page_t *find_and_remove_large_page(large_page_list_t *l,
+                                                       target_ulong vaddr,
+                                                       int mmu_idx)
+{
+    large_page_t *lp;
+    large_page_t **p= &l->allocated[mmu_idx];
+
+    while ((lp = *p)) {
+        if (lp->vaddr == (vaddr & lp->mask))
+            break;
+        p = &lp->next;
+    }
+    if (lp) *p = lp->next;
+    return lp;
+}
+
+static inline large_page_t *new_large_page(large_page_list_t *l,
+                                           target_ulong vaddr,
+                                           target_ulong size,
+                                           int mmu_idx)
+{
+    /* we assume the large page (vaddr,size) is not in l->allocated. */
+    large_page_t *lp;
+    target_ulong mask;
+
+    lp = pool_alloc(&l->large_page_pool);
+    mask =  ~(size - 1);
+    vaddr = vaddr & mask;
+    lp->vaddr = vaddr;
+    lp->mask = mask;
+    lp->entry_list = NULL;
+    lp->next = l->allocated[mmu_idx];
+    l->allocated[mmu_idx] = lp;
+    return lp;
+}
+
+static inline void free_large_page(large_page_t *lp)
+{
+    if (lp->entry_list) {
+        /* flush all tlb entries of this large page */
+        tlb_entry_t *te = lp->entry_list;
+        while (te) {
+            CPUTLBEntry *e = te->entry;
+            e->addr_read = -1;
+            e->addr_write = -1;
+            e->addr_code = -1;
+            te = te->next;
+        }
+        lp->entry_list = NULL;
+    }
+}
+
+static inline void free_all_large_pages(large_page_list_t *l)
+{
+    unsigned mmu_idx;
+    for (mmu_idx = 0; mmu_idx != NB_MMU_MODES; ++mmu_idx)
+        l->allocated[mmu_idx] = NULL;
+    pool_reset(&l->large_page_pool);
+    pool_reset(&l->tlb_entry_pool);
+}
+
+static inline void add_tlb_entry(large_page_list_t *l, large_page_t *p, CPUTLBEntry *e)
+{
+    tlb_entry_t *te = pool_alloc(&l->tlb_entry_pool);
+    te->entry = e;
+    /* insert te into the entry list of this large page */
+    te->next = p->entry_list;
+    p->entry_list = te;
+}
+
+/* Called when VCPU allocated */
+void large_page_list_init(large_page_list_t *l)
+{
+    unsigned mmu_idx;
+    for (mmu_idx = 0; mmu_idx != NB_MMU_MODES; ++mmu_idx)
+        l->allocated[mmu_idx] = NULL;
+    pool_init(&l->large_page_pool, sizeof(large_page_t), 1<<17);
+    pool_init(&l->tlb_entry_pool, sizeof(tlb_entry_t), 1<<20);
+}
+
 /* statistics */
 int tlb_flush_count;
 
@@ -55,19 +136,10 @@ void tlb_flush(CPUArchState *env, int flush_global)
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
     env->current_tb = NULL;
-
-    for (i = 0; i < CPU_TLB_SIZE; i++) {
-        int mmu_idx;
-
-        for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
-            env->tlb_table[mmu_idx][i] = s_cputlb_empty_entry;
-        }
-    }
-
+    memset(env->tlb_table, -1, sizeof(env->tlb_table));
     memset(env->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof (void *));
+    free_all_large_pages(&env->large_page_list);
 
-    env->tlb_flush_addr = -1;
-    env->tlb_flush_mask = 0;
     tlb_flush_count++;
 #if defined(ITLB_ENABLE)
     itlb_reset(env);
@@ -95,14 +167,17 @@ void tlb_flush_page(CPUArchState *env, target_ulong addr)
     printf("tlb_flush_page: " TARGET_FMT_lx "\n", addr);
 #endif
     /* Check if we need to flush due to large pages.  */
-    if ((addr & env->tlb_flush_mask) == env->tlb_flush_addr) {
-#if defined(DEBUG_TLB)
-        printf("tlb_flush_page: forced full flush ("
-               TARGET_FMT_lx "/" TARGET_FMT_lx ")\n",
-               env->tlb_flush_addr, env->tlb_flush_mask);
-#endif
-        tlb_flush(env, 1);
-        return;
+    bool flag = false;
+    large_page_t *lp;
+    for (mmu_idx = 0; mmu_idx < NB_MMU_MODES; mmu_idx++) {
+        lp = find_and_remove_large_page(&env->large_page_list, addr, mmu_idx);
+        if (lp) {
+            free_large_page(lp);
+            flag = true;
+        }
+    }
+    if (flag) {
+        return ;
     }
     /* must reset current TB so that interrupts cannot modify the
        links while we are modifying them */
@@ -176,8 +251,8 @@ void tlb_set_dirty(CPUArchState *env, target_ulong vaddr)
 
 /* Our TLB does not support large pages, so remember the area covered by
    large pages and trigger a full TLB flush if these are invalidated.  */
-static void tlb_add_large_page(CPUArchState *env, target_ulong vaddr,
-                               target_ulong size)
+static inline void tlb_add_large_page(CPUArchState *env, target_ulong vaddr,
+                                      target_ulong size)
 {
     target_ulong mask = ~(size - 1);
 
@@ -215,9 +290,6 @@ void tlb_set_page(CPUArchState *env, target_ulong vaddr,
     hwaddr iotlb;
 
     assert(size >= TARGET_PAGE_SIZE);
-    if (size != TARGET_PAGE_SIZE) {
-        tlb_add_large_page(env, vaddr, size);
-    }
     p = phys_page_find(paddr >> TARGET_PAGE_BITS);
     if (!p) {
         pd = IO_MEM_UNASSIGNED;
@@ -298,6 +370,17 @@ void tlb_set_page(CPUArchState *env, target_ulong vaddr,
         }
     } else {
         te->addr_write = -1;
+    }
+
+    if (size != TARGET_PAGE_SIZE) {
+        large_page_t *p;
+        /* 1. find out whether this large page has been allocated */
+        p = find_large_page(&env->large_page_list, vaddr, mmu_idx);
+        if (!p) {
+            p = new_large_page(&env->large_page_list, vaddr, size, mmu_idx);
+        }
+        /* add CPUTLBEntry into this large page */
+        add_tlb_entry(&env->large_page_list, p, te);
     }
 }
 

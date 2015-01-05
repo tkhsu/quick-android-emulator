@@ -536,6 +536,9 @@ void cpu_reset(CPUState *cpu)
     ibtc_init();
     ibtc_clean(env->ibtc);
 #endif
+#if defined(CONFIG_SOFTMMU)
+    large_page_list_init(&env->large_page_list);
+#endif
 }
 
 void cpu_x86_close(CPUX86State *env)

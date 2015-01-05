@@ -121,6 +121,14 @@ void resume_all_vcpus(void)
 
 void pause_all_vcpus(void)
 {
+#ifdef PROFILE_POOL
+    CPUState *cpu;
+    CPU_FOREACH(cpu) {
+        CPUArchState *env = (CPUArchState*)cpu->env_ptr;
+        pool_dump(&env->large_page_list.large_page_pool);
+        pool_dump(&env->large_page_list.tlb_entry_pool);
+    }
+#endif
 }
 
 void qemu_cpu_kick(CPUState *cpu)
