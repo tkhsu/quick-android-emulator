@@ -22,6 +22,7 @@ typedef struct tlb_entry_t {
 typedef struct large_page_t {
     target_ulong vaddr;
     target_ulong mask;
+    hwaddr paddr;
     int prot;
     struct large_page_t *next;
     /* entries within this large page */
@@ -150,21 +151,32 @@ static inline void pool_dump(pool_t *p)
 #endif
 }
 
+#define LARGE_PAGE_HASH_BITS 8
+#define LARGE_PAGE_HASH_SIZE (1u << LARGE_PAGE_HASH_BITS)
+#define LARGE_PAGE_HASH_MASK (LARGE_PAGE_HASH_SIZE - 1)
 typedef struct large_page_list_t {
-    large_page_t *allocated[NB_MMU_MODES];
+    large_page_t *allocated[NB_MMU_MODES][LARGE_PAGE_HASH_SIZE];
     pool_t large_page_pool;
     pool_t tlb_entry_pool;
 } large_page_list_t;
 
 /* Called when VCPU allocated */
 void large_page_list_init (large_page_list_t *l);
-/* Called in cputlb.c and softmmu_template.c */
+
+static inline target_ulong large_page_hash_func(target_ulong vaddr)
+{
+    const int LARGE_PAGE_HASH_SHIFT = 15;
+    return (vaddr >> LARGE_PAGE_HASH_SHIFT) & LARGE_PAGE_HASH_MASK;
+}
+
+/* Called in cputlb.c and softmmu_template.h */
 static inline large_page_t *find_large_page(large_page_list_t *l,
                                             target_ulong vaddr,
                                             int mmu_idx)
 {
     large_page_t *lp;
-    large_page_t **p1= &l->allocated[mmu_idx];
+    target_ulong hash = large_page_hash_func(vaddr);
+    large_page_t **p1= &l->allocated[mmu_idx][hash];
     large_page_t **p= p1;
 
     while ((lp = *p)) {

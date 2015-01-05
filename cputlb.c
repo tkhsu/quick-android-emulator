@@ -29,7 +29,8 @@ static inline large_page_t *find_and_remove_large_page(large_page_list_t *l,
                                                        int mmu_idx)
 {
     large_page_t *lp;
-    large_page_t **p= &l->allocated[mmu_idx];
+    target_ulong hash = large_page_hash_func(vaddr);
+    large_page_t **p= &l->allocated[mmu_idx][hash];
 
     while ((lp = *p)) {
         if (lp->vaddr == (vaddr & lp->mask))
@@ -44,22 +45,28 @@ static inline large_page_t *new_large_page(large_page_list_t *l,
                                            target_ulong vaddr,
                                            target_ulong size,
                                            int mmu_idx,
+                                           hwaddr paddr,
                                            int prot)
 {
     /* we assume the large page (vaddr,size) is not in l->allocated. */
     large_page_t *lp;
-    target_ulong mask;
+    uint64_t mask;
+    uint64_t size1 = size;
+    uint64_t vaddr1;
 
     lp = pool_alloc(&l->large_page_pool);
-    mask =  ~(size - 1);
-    vaddr = vaddr & mask;
-    lp->vaddr = vaddr;
-    lp->mask = mask;
+    mask =  ~(size1 - 1);
+    lp->paddr = paddr & mask;
     lp->prot = prot;
+    vaddr1 = vaddr & mask;
+    lp->vaddr = vaddr1;
+    lp->mask = mask;
     lp->entry_list = NULL;
-    lp->next = l->allocated[mmu_idx];
-    l->allocated[mmu_idx] = lp;
-    return lp;
+    target_ulong hash = large_page_hash_func(vaddr);
+    large_page_t **list_head = &l->allocated[mmu_idx][hash];
+    lp->next = *list_head;
+    *list_head = lp;
+     return lp;
 }
 
 static inline void free_large_page(CPUArchState *env, large_page_t *lp)
@@ -88,9 +95,7 @@ static inline void free_large_page(CPUArchState *env, large_page_t *lp)
 
 static inline void free_all_large_pages(large_page_list_t *l)
 {
-    unsigned mmu_idx;
-    for (mmu_idx = 0; mmu_idx != NB_MMU_MODES; ++mmu_idx)
-        l->allocated[mmu_idx] = NULL;
+    memset(l->allocated, 0, sizeof(l->allocated));
     pool_reset(&l->large_page_pool);
     pool_reset(&l->tlb_entry_pool);
 }
@@ -107,9 +112,7 @@ static inline void add_tlb_entry(large_page_list_t *l, large_page_t *p, CPUTLBEn
 /* Called when VCPU allocated */
 void large_page_list_init(large_page_list_t *l)
 {
-    unsigned mmu_idx;
-    for (mmu_idx = 0; mmu_idx != NB_MMU_MODES; ++mmu_idx)
-        l->allocated[mmu_idx] = NULL;
+    memset(l->allocated, 0, sizeof(l->allocated));
     pool_init(&l->large_page_pool, sizeof(large_page_t), 1<<17);
     pool_init(&l->tlb_entry_pool, sizeof(tlb_entry_t), 1<<20);
 }
@@ -387,7 +390,7 @@ void tlb_set_page(CPUArchState *env, target_ulong vaddr,
         /* 1. find out whether this large page has been allocated */
         p = find_large_page(&env->large_page_list, vaddr, mmu_idx);
         if (!p) {
-            p = new_large_page(&env->large_page_list, vaddr, size, mmu_idx, prot);
+            p = new_large_page(&env->large_page_list, vaddr, size, mmu_idx, paddr, prot);
         }
         /* add CPUTLBEntry into this large page */
         add_tlb_entry(&env->large_page_list, p, te);
