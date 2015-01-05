@@ -914,6 +914,15 @@ void cpu_x86_update_cr3(CPUX86State *env, target_ulong new_cr3)
     }
 }
 
+uint64_t get_page_table(void *env1)
+{
+    CPUX86State *env = (CPUX86State *)env1;
+    if (unlikely(!(env->cr[0] & CR0_PG_MASK))) {
+        return 0;
+    }
+    return env->cr[3];
+}
+
 void cpu_x86_update_cr4(CPUX86State *env, uint32_t new_cr4)
 {
 #if defined(DEBUG_MMU)

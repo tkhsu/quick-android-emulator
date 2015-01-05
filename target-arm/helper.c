@@ -3250,3 +3250,15 @@ void HELPER(set_teecr)(CPUARMState *env, uint32_t val)
         tb_flush(env);
     }
 }
+
+uint64_t get_page_table(void *env1)
+{
+    CPUARMState *env = (CPUARMState *)env1;
+    if (unlikely((env->cp15.c1_sys & 1) == 0)) {
+        return 0;
+    } else if (unlikely(arm_feature(env, ARM_FEATURE_MPU))) {
+	return 0;
+    } else {
+        return env->cp15.c2_base0  ^ env->cp15.c2_base1;
+    }
+}

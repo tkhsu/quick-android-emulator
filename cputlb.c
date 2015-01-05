@@ -127,12 +127,56 @@ static const CPUTLBEntry s_cputlb_empty_entry = {
     .addend     = -1,
 };
 
-/* tlb_info stuff */
-static inline void set_tlb_info(tlb_info_t *I, int bits)
+/* hash table for tlb profiles */
+#define TLB_PROFILE_HASH_BITS 12
+#define TLB_PROFILE_HASH_MASK ((1 << TLB_PROFILE_HASH_BITS) - 1)
+#define TLB_PROFILE_HASH_SIZE (1 << TLB_PROFILE_HASH_BITS)
+static tlb_profile_t *tlb_profile_hash[TLB_PROFILE_HASH_SIZE];
+static pool_t tlb_profile_pool;
+static inline uint64_t tlb_profile_hash_func(uint64_t id)
 {
-    int cpu_tlb_size = 1 << bits;
+    uint64_t hash = ((id >> 12) ^ (id >> (12 + TLB_PROFILE_HASH_BITS)));
+    return  hash & TLB_PROFILE_HASH_MASK;
+}
 
-    I->bits = bits;
+static inline tlb_profile_t *tlb_profile_allocate(uint64_t id)
+{
+    tlb_profile_t *profile = pool_alloc(&tlb_profile_pool);
+    profile->id = id;
+    profile->bits = DEFAULT_TLB_BITS;
+    profile->next = NULL;
+    return profile;
+}
+
+tlb_profile_t *find_or_create_tlb_profile(uint64_t id)
+{
+    uint64_t h;
+    tlb_profile_t **p, *profile;
+
+    h = tlb_profile_hash_func(id);
+    p = &tlb_profile_hash[h];
+    while ((profile = *p)) {
+        if (profile->id == id)
+            goto found;
+        p = &profile->next;
+    }
+    /* not found, allocate one */
+    if (!profile)
+        profile = tlb_profile_allocate(id);
+found:
+    if (*p) *p = profile->next; /* remove from list */
+    /* move profile to the first item of list */
+    profile->next = tlb_profile_hash[h];
+    tlb_profile_hash[h] = profile->next;
+    return profile;
+}
+
+/* tlb_info stuff */
+static inline void set_tlb_info(tlb_info_t *I, tlb_profile_t *profile)
+{
+    int cpu_tlb_size = 1 << profile->bits;
+    I->profile = profile;
+
     I->nb_tlb_entries = cpu_tlb_size;
     I->tlb_table_size = cpu_tlb_size * sizeof(CPUTLBEntry);
     I->tlb_table_mask = (cpu_tlb_size - 1) * sizeof(CPUTLBEntry);
@@ -140,8 +184,9 @@ static inline void set_tlb_info(tlb_info_t *I, int bits)
 
 void init_tlb_info(void *env1)
 {
+    pool_init(&tlb_profile_pool, sizeof(tlb_profile_t), (1 << 16));
     CPUArchState *env = (CPUArchState*)env1;
-    set_tlb_info(&env->tlb_info, DEFAULT_TLB_BITS);
+    set_tlb_info(&env->tlb_info, tlb_profile_allocate(0));
     memset(env->tlb_table, -1, sizeof(env->tlb_table));
 }
 
@@ -159,20 +204,28 @@ static inline int find_max(int *A, int n)
 static void update_tlb_info(CPUArchState *env)
 {
     tlb_info_t *I = &env->tlb_info;
-    int bits = I->bits;
+    tlb_profile_t *profile = I->profile;
+    int bits = profile->bits;
+    int nb_tlb_entries_used;
+    int miss;
+    uint64_t id;
 
-    int miss = find_max(I->nb_conflict_misses, NB_MMU_MODES);
+    miss = find_max(profile->nb_conflict_misses, NB_MMU_MODES);
     if (bits < MAX_TLB_BITS && miss > MAX_CONFLICT_MISS) {
-        set_tlb_info(I, bits + 1);
-        return ;
+        profile->bits = bits + 1;
+        goto done;
     }
 
-    if (bits <= MIN_TLB_BITS) return;
-    int nb_tlb_entries_used = find_max(I->nb_tlb_entries_used, NB_MMU_MODES);
-    if (nb_tlb_entries_used < (I->nb_tlb_entries >> 2)) {
-        set_tlb_info(I, bits - 1);
-        return ;
+    nb_tlb_entries_used = find_max(profile->nb_tlb_entries_used, NB_MMU_MODES);
+    if (bits > MIN_TLB_BITS && nb_tlb_entries_used < (I->nb_tlb_entries >> 2)) {
+        profile->bits = bits - 1;
+        goto done;
     }
+done:
+    id = get_page_table(env);
+    if (profile->id != id)
+        profile = find_or_create_tlb_profile(id);
+    set_tlb_info(I, profile);
 }
 
 /* NOTE:
@@ -190,6 +243,7 @@ static void update_tlb_info(CPUArchState *env)
 void tlb_flush(CPUArchState *env, int flush_global)
 {
     tlb_info_t *I = &env->tlb_info;
+    tlb_profile_t *profile = I->profile;
     int i;
 
 #if defined(DEBUG_TLB)
@@ -201,8 +255,8 @@ void tlb_flush(CPUArchState *env, int flush_global)
     update_tlb_info(env);
     for (i = 0; i != NB_MMU_MODES; ++i) {
         memset(&env->tlb_table[i][0], -1, I->tlb_table_size);
-        I->nb_conflict_misses[i] = 0;
-        I->nb_tlb_entries_used[i] = 0;
+        profile->nb_conflict_misses[i] = 0;
+        profile->nb_tlb_entries_used[i] = 0;
     }
     memset(env->tb_jmp_cache, 0, TB_JMP_CACHE_SIZE * sizeof (void *));
     free_all_large_pages(&env->large_page_list);
@@ -417,7 +471,7 @@ void tlb_set_page(CPUArchState *env, target_ulong vaddr,
         test &= te->addr_write;
         test &= te->addr_code;
         if (test == -1)
-            env->tlb_info.nb_tlb_entries_used[mmu_idx]++;
+            env->tlb_info.profile->nb_tlb_entries_used[mmu_idx]++;
     }
     te->addend = addend - vaddr;
     if (prot & PAGE_READ) {

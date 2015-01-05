@@ -107,14 +107,24 @@ QEMU_BUILD_BUG_ON(sizeof(CPUTLBEntry) != (1 << CPU_TLB_ENTRY_BITS));
 #define DEFAULT_TLB_BITS 11
 #define MIN_TLB_BITS 8
 #define MAX_TLB_BITS 13
-typedef struct tlb_info_t {
+/* TLB profile for each page table */
+typedef struct tlb_profile_t {
+    uint64_t id; /* use page table as ID */
     int bits;
+    /* profiling */
+    int nb_conflict_misses[NB_MMU_MODES];
+    int nb_tlb_entries_used[NB_MMU_MODES];
+    struct tlb_profile_t *next;
+} tlb_profile_t;
+tlb_profile_t *find_or_create_tlb_profile(uint64_t id);
+/* used as profile id */
+uint64_t get_page_table(void *env);
+typedef struct tlb_info_t {
     int nb_tlb_entries;
     /* for tlb_flush */
     int tlb_table_size;
     int tlb_table_mask;
-    int nb_conflict_misses[NB_MMU_MODES];
-    int nb_tlb_entries_used[NB_MMU_MODES];
+    tlb_profile_t *profile;
 } tlb_info_t;
 void init_tlb_info(void *env);
 #include "exec/cputlb-large-page.h"

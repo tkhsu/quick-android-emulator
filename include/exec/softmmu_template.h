@@ -114,7 +114,7 @@
 #define UPDATE_TLB_INFO(tlb_addr, env, mmu_idx, index)                \
 do {                                                                  \
     if (tlb_addr != -1) {                                             \
-        env->tlb_info.nb_conflict_misses[mmu_idx]++;                  \
+        env->tlb_info.profile->nb_conflict_misses[mmu_idx]++;         \
         try_enlarge_tlb(env, mmu_idx);                                \
         index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE(env) - 1); \
     }                                                                 \
