@@ -105,8 +105,8 @@ typedef struct CPUTLBEntry {
 
 QEMU_BUILD_BUG_ON(sizeof(CPUTLBEntry) != (1 << CPU_TLB_ENTRY_BITS));
 #define DEFAULT_TLB_BITS 11
-#define MIN_TLB_BITS 8
-#define MAX_TLB_BITS 13
+#define MIN_TLB_BITS 6
+#define MAX_TLB_BITS 14
 /* TLB profile for each page table */
 typedef struct tlb_profile_t {
     uint64_t id; /* use page table as ID */

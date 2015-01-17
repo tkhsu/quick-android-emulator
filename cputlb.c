@@ -167,7 +167,7 @@ found:
     if (*p) *p = profile->next; /* remove from list */
     /* move profile to the first item of list */
     profile->next = tlb_profile_hash[h];
-    tlb_profile_hash[h] = profile->next;
+    tlb_profile_hash[h] = profile;
     return profile;
 }
 

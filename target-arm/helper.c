@@ -3259,6 +3259,6 @@ uint64_t get_page_table(void *env1)
     } else if (unlikely(arm_feature(env, ARM_FEATURE_MPU))) {
 	return 0;
     } else {
-        return env->cp15.c2_base0  ^ env->cp15.c2_base1;
+        return (env->cp15.c2_base0 ^ env->cp15.c2_base1) + env->cp15.c2_base0;
     }
 }
